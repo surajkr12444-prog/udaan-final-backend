@@ -1,10 +1,9 @@
-import 'dotenv/config';
-import { connectDB } from '../config/db.js';
 import Scheme from '../models/Scheme.js';
+import Scholarship from '../models/Scholarship.js';
 import { ENTREPRENEUR_SCHEMES } from '../data/entrepreneurSchemes.js';
+import { SCHOLARSHIPS } from '../data/scholarships.js';
 
-try {
-  await connectDB();
+export async function ensureSeedData() {
   for (const s of ENTREPRENEUR_SCHEMES) {
     const doc = {
       name: s.name,
@@ -35,9 +34,14 @@ try {
     };
     await Scheme.findOneAndUpdate({ slug: s.id }, { $set: doc }, { upsert: true, new: true, setDefaultsOnInsert: true });
   }
-  console.log(`Seeded ${ENTREPRENEUR_SCHEMES.length} entrepreneur schemes.`);
-  process.exit(0);
-} catch (err) {
-  console.error(err);
-  process.exit(1);
+
+  for (const s of SCHOLARSHIPS) {
+    await Scholarship.findOneAndUpdate(
+      { frontendId: s.id },
+      { $set: { ...s, frontendId: s.id, active: true } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+  }
+
+  console.log(`Seed data ready: ${ENTREPRENEUR_SCHEMES.length} schemes, ${SCHOLARSHIPS.length} scholarships.`);
 }

@@ -133,3 +133,14 @@ export async function matchSchemes(profile: unknown) {
 ```
 
 Then change the Wizard/Results flow so Wizard submits its completed profile to this endpoint and Results renders `response.matches`.
+
+
+## Student scholarship API
+
+After deployment, seed both datasets with `npm run seed:all` using the same MongoDB URI.
+
+- `POST /api/match` — entrepreneur scheme matching
+- `GET /api/scholarships` — list scholarships
+- `POST /api/scholarships/match` — student scholarship matching
+
+Both matching endpoints return frontend-compatible ranked results.

@@ -1,142 +1,90 @@
-const FIELD_ALIASES = {
-  annualIncome: ['annualIncome', 'income', 'yearlyIncome'],
-  fundingRequired: ['fundingRequired', 'funding', 'loanAmount', 'amountRequired'],
-  businessType: ['businessType', 'business', 'sector'],
-  businessStage: ['businessStage', 'stage'],
-  category: ['category', 'casteCategory', 'socialCategory'],
-  occupation: ['occupation', 'trade'],
-  startupRecognized: ['startupRecognized', 'dpiitRecognized'],
-  state: ['state'],
-  district: ['district'],
-  gender: ['gender'],
-  age: ['age']
-};
-
 function normalizeString(value) {
   return typeof value === 'string' ? value.trim().toLowerCase() : value;
 }
 
-function normalizeArray(value) {
-  return Array.isArray(value) ? value.map(normalizeString) : [normalizeString(value)];
-}
+function entrepreneurCategoryScore(user, scheme) {
+  const meaningfulUser = (user || []).filter((c) => c !== 'general');
+  const schemeOpen = (scheme.categories || []).includes('general');
+  const matched = meaningfulUser.filter((c) => (scheme.categories || []).includes(c));
 
-function getValue(profile, field) {
-  const aliases = FIELD_ALIASES[field] || [field];
-  for (const key of aliases) {
-    if (profile[key] !== undefined && profile[key] !== null && profile[key] !== '') return profile[key];
+  if (matched.length > 0) {
+    if (!schemeOpen) return { score: 1, reason: 'Specifically targets your community' };
+    return { score: 0.8, reason: 'Open scheme with priority for your category' };
   }
-  return undefined;
-}
-
-function rulePasses(profile, rule) {
-  const actual = getValue(profile, rule.field);
-  const expected = rule.value;
-
-  if (actual === undefined) return { pass: false, missing: true };
-
-  switch (rule.operator) {
-    case 'eq':
-      return { pass: normalizeString(actual) === normalizeString(expected) };
-    case 'neq':
-      return { pass: normalizeString(actual) !== normalizeString(expected) };
-    case 'in':
-      return { pass: normalizeArray(expected).includes(normalizeString(actual)) };
-    case 'notIn':
-      return { pass: !normalizeArray(expected).includes(normalizeString(actual)) };
-    case 'gte':
-      return { pass: Number(actual) >= Number(expected) };
-    case 'lte':
-      return { pass: Number(actual) <= Number(expected) };
-    case 'between': {
-      const [min, max] = Array.isArray(expected) ? expected : [];
-      return { pass: Number(actual) >= Number(min) && Number(actual) <= Number(max) };
-    }
-    case 'includesAny': {
-      const actualList = normalizeArray(actual);
-      const expectedList = normalizeArray(expected);
-      return { pass: expectedList.some((item) => actualList.includes(item)) };
-    }
-    case 'truthy':
-      return { pass: Boolean(actual) === true };
-    default:
-      return { pass: false };
+  if (meaningfulUser.length === 0) {
+    return schemeOpen
+      ? { score: 0.75, reason: 'Open to all entrepreneurs' }
+      : { score: 0.25, reason: 'Targeted scheme — limited fit' };
   }
+  return schemeOpen
+    ? { score: 0.45, reason: 'Open scheme, no special targeting for you' }
+    : { score: 0.1, reason: 'Targets a different community' };
 }
 
-function ruleMessage(rule, result) {
-  const label = rule.label || rule.field;
-  if (result.missing) return `${label}: information not provided`;
-  return result.pass ? `${label}: matched` : `${label}: not matched`;
+function listScore(userVal, list = []) {
+  if (list.includes(userVal)) return 1;
+  if (list.includes('any')) return 1;
+  return 0.3;
 }
 
-function evaluateGroup(profile, group) {
-  const details = group.rules.map((rule) => ({ rule, result: rulePasses(profile, rule) }));
-  const passed = group.logic === 'any'
-    ? details.some((item) => item.result.pass)
-    : details.every((item) => item.result.pass);
+function fundingScore(userMin, userMax, scheme) {
+  const overlap = Math.min(userMax, scheme.loanMax) - Math.max(userMin, scheme.loanMin);
+  if (overlap > 0) return 1;
+  const gap = userMax < scheme.loanMin ? scheme.loanMin - userMax : userMin - scheme.loanMax;
+  return Math.max(0.15, 1 - gap / 40);
+}
 
+function publicEntrepreneurScheme(schemeDoc) {
+  const s = schemeDoc.toObject ? schemeDoc.toObject() : schemeDoc;
   return {
-    passed,
-    hard: group.hard,
-    weight: group.weight || 10,
-    message: group.label || `Rule group (${group.logic})`,
-    details: details.map(({ rule, result }) => ruleMessage(rule, result))
-  };
-}
-
-export function evaluateScheme(profile, schemeDoc) {
-  const scheme = schemeDoc.toObject ? schemeDoc.toObject() : schemeDoc;
-  const checks = [];
-
-  for (const rule of scheme.rules || []) {
-    const result = rulePasses(profile, rule);
-    checks.push({
-      passed: result.pass,
-      hard: rule.hard,
-      weight: rule.weight || 10,
-      message: ruleMessage(rule, result),
-      details: []
-    });
-  }
-
-  for (const group of scheme.ruleGroups || []) {
-    checks.push(evaluateGroup(profile, group));
-  }
-
-  const totalWeight = checks.reduce((sum, c) => sum + c.weight, 0) || 1;
-  const matchedWeight = checks.reduce((sum, c) => sum + (c.passed ? c.weight : 0), 0);
-  const score = checks.length ? Math.round((matchedWeight / totalWeight) * 100) : 75;
-  const eligible = !checks.some((c) => c.hard && !c.passed);
-
-  const reasons = checks.filter((c) => c.passed).map((c) => c.message);
-  const blockers = checks.filter((c) => c.hard && !c.passed).map((c) => c.message);
-  const missingInformation = checks
-    .flatMap((c) => [c.message, ...(c.details || [])])
-    .filter((text) => text.includes('information not provided'));
-
-  return {
-    id: scheme._id,
-    name: scheme.name,
-    slug: scheme.slug,
-    ministry: scheme.ministry,
-    description: scheme.description,
-    benefits: scheme.benefits,
-    tags: scheme.tags,
-    officialUrl: scheme.officialUrl,
-    eligible,
-    matchScore: score,
-    reasons,
-    blockers,
-    missingInformation,
-    sourceNote: scheme.sourceNote
+    id: s.frontendId || s.slug,
+    name: s.name,
+    shortName: s.shortName || s.name,
+    provider: s.provider || s.ministry || '',
+    tagline: s.tagline || '',
+    description: s.description,
+    categories: s.categories || [],
+    stages: s.stages || [],
+    sectors: s.sectors || [],
+    locations: s.locations || [],
+    loanMin: s.loanMin ?? 0,
+    loanMax: s.loanMax ?? 0,
+    amountLabel: s.amountLabel || '',
+    interest: s.interest || '',
+    benefits: s.benefits || [],
+    documents: s.documents || [],
+    applyUrl: s.applyUrl || s.officialUrl || '',
+    colorTag: s.colorTag || '#0F5257'
   };
 }
 
 export function rankSchemes(profile, schemes) {
-  return schemes
-    .map((scheme) => evaluateScheme(profile, scheme))
-    .sort((a, b) => {
-      if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
-      return b.matchScore - a.matchScore;
-    });
+  // Current Udaan frontend profile shape
+  if (Array.isArray(profile.categories) && profile.stage && profile.sector && profile.location) {
+    return schemes
+      .map((schemeDoc) => {
+        const scheme = publicEntrepreneurScheme(schemeDoc);
+        const cat = entrepreneurCategoryScore(profile.categories, scheme);
+        const stageS = listScore(profile.stage, scheme.stages);
+        const sectorS = listScore(profile.sector, scheme.sectors);
+        const locS = listScore(profile.location, scheme.locations);
+        const fundS = fundingScore(Number(profile.fundingMin || 0), Number(profile.fundingMax || 0), scheme);
+
+        const total = cat.score * 0.35 + stageS * 0.15 + sectorS * 0.15 + locS * 0.1 + fundS * 0.25;
+        const reasons = [cat.reason];
+        if (stageS === 1) reasons.push('Matches your business stage');
+        if (sectorS === 1) reasons.push('Fits your business sector');
+        if (fundS === 1) reasons.push('Funding range matches your need');
+        if (locS === 1) reasons.push('Available in your location type');
+        const score = Math.round(Math.min(0.98, Math.max(0.04, total)) * 100);
+        return { scheme, score, matchScore: score, eligible: true, reasons, blockers: [], missingInformation: [] };
+      })
+      .sort((a, b) => b.score - a.score);
+  }
+
+  // Safe generic fallback for older API clients
+  return schemes.map((schemeDoc) => {
+    const scheme = publicEntrepreneurScheme(schemeDoc);
+    return { scheme, score: 75, matchScore: 75, eligible: true, reasons: ['Scheme available for review'], blockers: [], missingInformation: [] };
+  }).sort((a, b) => b.score - a.score);
 }
