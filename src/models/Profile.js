@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 const profileSchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true, index: true },
+
+    // Backward-compatible entrepreneur fields
     fullName: { type: String, trim: true },
     age: Number,
     gender: String,
@@ -19,7 +21,11 @@ const profileSchema = new mongoose.Schema(
     disability: Boolean,
     minority: Boolean,
     education: String,
-    answers: { type: mongoose.Schema.Types.Mixed, default: {} }
+    answers: { type: mongoose.Schema.Types.Mixed, default: {} },
+
+    // New persistent snapshots for both Udaan flows
+    entrepreneur: { type: mongoose.Schema.Types.Mixed, default: null },
+    student: { type: mongoose.Schema.Types.Mixed, default: null }
   },
   { timestamps: true, minimize: false }
 );

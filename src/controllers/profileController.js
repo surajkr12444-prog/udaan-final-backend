@@ -20,10 +20,23 @@ export async function getProfile(req, res) {
 }
 
 export async function upsertProfile(req, res) {
-  const data = pickProfile(req.body);
+  const { type, profile: nestedProfile } = req.body || {};
+  let update = {};
+
+  if ((type === 'entrepreneur' || type === 'student') && nestedProfile && typeof nestedProfile === 'object') {
+    update[`$set`] = { [type]: nestedProfile };
+    if (type === 'entrepreneur') {
+      Object.assign(update.$set, pickProfile(nestedProfile));
+      update.$set.answers = nestedProfile;
+    }
+  } else {
+    const data = pickProfile(req.body || {});
+    update = { $set: data };
+  }
+
   const profile = await Profile.findOneAndUpdate(
     { user: req.user._id },
-    { $set: data, $setOnInsert: { user: req.user._id } },
+    { ...update, $setOnInsert: { user: req.user._id } },
     { new: true, upsert: true, runValidators: true }
   );
   res.status(200).json({ success: true, profile });

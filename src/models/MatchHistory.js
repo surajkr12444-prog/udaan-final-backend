@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 const matchHistorySchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    kind: { type: String, enum: ['entrepreneur', 'student'], default: 'entrepreneur', index: true },
     profileSnapshot: { type: mongoose.Schema.Types.Mixed, required: true },
     results: { type: mongoose.Schema.Types.Mixed, required: true }
   },

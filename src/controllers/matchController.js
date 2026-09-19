@@ -10,7 +10,7 @@ const PROFILE_FIELDS = [
 ];
 
 function profileForStorage(profile) {
-  const data = { answers: profile };
+  const data = { answers: profile, entrepreneur: profile };
   for (const key of PROFILE_FIELDS) {
     if (profile[key] !== undefined) data[key] = profile[key];
   }
@@ -38,6 +38,7 @@ export async function matchSchemes(req, res) {
   if (req.user) {
     const history = await MatchHistory.create({
       user: req.user._id,
+      kind: 'entrepreneur',
       profileSnapshot: profile,
       results: matches
     });
@@ -54,8 +55,12 @@ export async function matchSchemes(req, res) {
 }
 
 export async function getMatchHistory(req, res) {
-  const history = await MatchHistory.find({ user: req.user._id })
+  const kind = req.query.kind;
+  const query = { user: req.user._id };
+  if (kind === 'entrepreneur' || kind === 'student') query.kind = kind;
+
+  const history = await MatchHistory.find(query)
     .sort({ createdAt: -1 })
-    .limit(20);
+    .limit(30);
   res.json({ success: true, history });
 }

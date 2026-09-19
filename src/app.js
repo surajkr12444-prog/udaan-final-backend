@@ -6,6 +6,8 @@ import schemeRoutes from './routes/schemeRoutes.js';
 import matchRoutes from './routes/matchRoutes.js';
 import applicationRoutes from './routes/applicationRoutes.js';
 import scholarshipRoutes from './routes/scholarshipRoutes.js';
+import scholarshipApplicationRoutes from './routes/scholarshipApplicationRoutes.js';
+import assistantRoutes from './routes/assistantRoutes.js';
 import { errorHandler, notFound } from './middleware/error.js';
 
 const app = express();
@@ -29,7 +31,7 @@ app.get('/', (_req, res) => {
     success: true,
     service: 'Udaan.AI Backend',
     message: 'API is running',
-    endpoints: ['/api/health', '/api/auth', '/api/profile', '/api/schemes', '/api/match', '/api/applications', '/api/scholarships']
+    endpoints: ['/api/health', '/api/auth', '/api/profile', '/api/schemes', '/api/match', '/api/applications', '/api/scholarships', '/api/scholarship-applications', '/api/assistant/chat']
   });
 });
 
@@ -43,6 +45,8 @@ app.use('/api/schemes', schemeRoutes);
 app.use('/api/match', matchRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/scholarships', scholarshipRoutes);
+app.use('/api/scholarship-applications', scholarshipApplicationRoutes);
+app.use('/api/assistant', assistantRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -1,4 +1,6 @@
 import Scholarship from '../models/Scholarship.js';
+import MatchHistory from '../models/MatchHistory.js';
+import Profile from '../models/Profile.js';
 import { rankScholarships } from '../services/scholarshipMatchingService.js';
 
 export async function listScholarships(req, res) {
@@ -22,12 +24,34 @@ export async function matchScholarships(req, res) {
   if (missing.length) {
     return res.status(400).json({ success: false, message: `Missing fields: ${missing.join(', ')}` });
   }
+
   const scholarships = await Scholarship.find({ active: true });
   const matches = rankScholarships(profile, scholarships);
+
+  if (req.user && req.body.saveProfile === true) {
+    await Profile.findOneAndUpdate(
+      { user: req.user._id },
+      { $set: { student: profile }, $setOnInsert: { user: req.user._id } },
+      { upsert: true, new: true, runValidators: true }
+    );
+  }
+
+  let historyId = null;
+  if (req.user) {
+    const history = await MatchHistory.create({
+      user: req.user._id,
+      kind: 'student',
+      profileSnapshot: profile,
+      results: matches
+    });
+    historyId = history._id;
+  }
+
   res.json({
     success: true,
     count: matches.length,
     eligibleCount: matches.filter((m) => m.eligible).length,
+    historyId,
     matches
   });
 }
